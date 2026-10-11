@@ -5,6 +5,8 @@
 #include "ZombieSurviverProjectile.h"
 #include "ZombieSurviverGameMode.h"
 #include "HealthComponent.h"
+#include "WoodWall.h"
+#include "WoodPlank.h"
 #include "SurvivorFeedback.h"
 #include "Animation/AnimInstance.h"
 #include "GameFramework/InputSettings.h"
@@ -101,6 +103,8 @@ AZombieSurviverCharacter::AZombieSurviverCharacter()
 	bDead = false;
 	bFlashlightOn = false;
 	bViewCached = false;
+	bHammerHeld = false;
+	FocusedEntrance = nullptr;
 
 	// Note: The ProjectileClass and the skeletal mesh/anim blueprints for Mesh1P are set in the
 	// derived blueprint asset named MyCharacter (to avoid direct content references in C++)
@@ -171,7 +175,8 @@ void AZombieSurviverCharacter::SetupPlayerInputComponent(class UInputComponent* 
 
 	InputComponent->BindAction("Sprint", IE_Pressed, this, &AZombieSurviverCharacter::StartSprint);
 	InputComponent->BindAction("Sprint", IE_Released, this, &AZombieSurviverCharacter::StopSprint);
-	InputComponent->BindAction("Melee", IE_Pressed, this, &AZombieSurviverCharacter::OnMelee);
+	InputComponent->BindAction("Melee", IE_Pressed, this, &AZombieSurviverCharacter::OnHammerPressed);
+	InputComponent->BindAction("Melee", IE_Released, this, &AZombieSurviverCharacter::OnHammerReleased);
 	InputComponent->BindAction("Flashlight", IE_Pressed, this, &AZombieSurviverCharacter::ToggleFlashlight);
 	
 	InputComponent->BindAxis("MoveForward", this, &AZombieSurviverCharacter::MoveForward);
@@ -239,6 +244,92 @@ void AZombieSurviverCharacter::OnFire()
 	AddCameraTrauma(0.28f);
 	MuzzleIntensity = 22000.f;
 	MuzzleLight->SetVisibility(true);
+}
+
+void AZombieSurviverCharacter::OnHammerPressed()
+{
+	bHammerHeld = true;
+	SwingHammer(true);
+}
+
+void AZombieSurviverCharacter::OnHammerReleased()
+{
+	bHammerHeld = false;
+}
+
+void AZombieSurviverCharacter::SwingHammer(bool bAllowMelee)
+{
+	if (bDead || MeleeCooldown > 0.f)
+	{
+		return;
+	}
+
+	UpdateRepairAim();
+	if (FocusedEntrance && FocusedEntrance->CanRepair())
+	{
+		const int32 Nailed = FocusedEntrance->RepairWithHammer(32);
+		if (Nailed > 0)
+		{
+			MeleeCooldown = Stamina < 8.f ? 0.52f : 0.33f;
+			Stamina = FMath::Max(0.f, Stamina - 8.f);
+			StaminaRegenDelay = 0.35f;
+			AddCameraTrauma(0.24f);
+			AddControllerPitchInput(-0.5f);
+			return;
+		}
+	}
+
+	if (bAllowMelee)
+	{
+		OnMelee();
+	}
+}
+
+void AZombieSurviverCharacter::UpdateRepairAim()
+{
+	FocusedEntrance = nullptr;
+	if (bDead || !GetWorld() || !FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	const FVector Start = FirstPersonCameraComponent->GetComponentLocation();
+	const FVector End = Start + FirstPersonCameraComponent->GetForwardVector() * 340.f;
+	FCollisionQueryParams Params(TEXT("Hammer"), false, this);
+	FHitResult Hit;
+	if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		return;
+	}
+
+	AWoodWall* Wall = nullptr;
+	if (AWoodWall* HitWall = Cast<AWoodWall>(Hit.GetActor()))
+	{
+		Wall = HitWall;
+	}
+	else if (AWoodPlank* Plank = Cast<AWoodPlank>(Hit.GetActor()))
+	{
+		Wall = Plank->GetBarricade();
+	}
+	if (!Wall)
+	{
+		return;
+	}
+
+	if (Hit.bStartPenetrating)
+	{
+		const float Facing = FVector::DotProduct(FirstPersonCameraComponent->GetForwardVector(), (Wall->GetDoorLocation() - Start).GetSafeNormal());
+		if (Facing < 0.45f)
+		{
+			return;
+		}
+	}
+	FocusedEntrance = Wall;
+}
+
+bool AZombieSurviverCharacter::WantsHammerPrompt() const
+{
+	return !bDead && FocusedEntrance && !FocusedEntrance->IsPendingKill() && FocusedEntrance->CanRepair();
 }
 
 void AZombieSurviverCharacter::OnMelee()
@@ -509,6 +600,11 @@ void AZombieSurviverCharacter::UpdateFeel(float DeltaSeconds)
 {
 	FireCooldown = FMath::Max(0.f, FireCooldown - DeltaSeconds);
 	MeleeCooldown = FMath::Max(0.f, MeleeCooldown - DeltaSeconds);
+	UpdateRepairAim();
+	if (bHammerHeld)
+	{
+		SwingHammer(false);
+	}
 	DamageFlash = FMath::Max(0.f, DamageFlash - DeltaSeconds * 1.7f);
 	HitConfirm = FMath::Max(0.f, HitConfirm - DeltaSeconds * 6.f);
 	Trauma = FMath::Max(0.f, Trauma - DeltaSeconds * 1.8f);

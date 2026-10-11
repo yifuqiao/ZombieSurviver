@@ -4,6 +4,7 @@
 #include "ZombieSurviverHUD.h"
 #include "ZombieSurviverCharacter.h"
 #include "ZombieSurviverGameMode.h"
+#include "WoodWall.h"
 #include "Engine/Canvas.h"
 #include "Engine/Font.h"
 #include "TextureResource.h"
@@ -66,15 +67,50 @@ void AZombieSurviverHUD::DrawHUD()
 
 	if (Mode && Small)
 	{
+		const FString AliveText = FString::Printf(TEXT("ALIVE  %s"), *Mode->GetSurvivalText());
 		const FString Wave = FString::Printf(TEXT("WAVE  %d"), Mode->GetWave());
 		const FString Score = FString::Printf(TEXT("SCORE  %d"), Mode->GetScore());
 		const FString Horde = FString::Printf(TEXT("HORDE  %d"), Mode->GetAlive());
-		const FString Lines[] = { Wave, Score, Horde };
-		for (int32 Index = 0; Index < 3; ++Index)
+		const FString Lines[] = { AliveText, Wave, Score, Horde };
+		for (int32 Index = 0; Index < 4; ++Index)
 		{
-			FCanvasTextItem Line(FVector2D(Width - Margin - 160.f, Margin + Index * 22.f), FText::FromString(Lines[Index]), Small, FLinearColor(0.95f, 0.9f, 0.75f, 0.92f));
+			FCanvasTextItem Line(FVector2D(Width - Margin - 180.f, Margin + Index * 22.f), FText::FromString(Lines[Index]), Small, FLinearColor(0.95f, 0.9f, 0.75f, 0.92f));
 			Line.EnableShadow(FLinearColor::Black);
 			Canvas->DrawItem(Line);
+		}
+
+		float DoorY = Margin + 100.f;
+		const float DoorWidth = FMath::Clamp(Width * 0.16f, 140.f, 260.f);
+		const float DoorHeight = FMath::Clamp(Height * 0.012f, 8.f, 14.f);
+		const float DoorX = Width - Margin - DoorWidth;
+		for (AWoodWall* Entrance : Mode->GetEntrances())
+		{
+			if (!Entrance || Entrance->IsPendingKill())
+			{
+				continue;
+			}
+
+			const float Integrity = Entrance->GetIntegrity();
+			const bool bOpen = Entrance->IsBreached();
+			FLinearColor DoorColor = FMath::Lerp(FLinearColor(0.28f, 0.58f, 0.26f, 0.95f), FLinearColor(0.55f, 0.34f, 0.14f, 0.95f), Entrance->GetWearAlpha());
+			if (Integrity < 0.66f)
+			{
+				DoorColor = FLinearColor(0.82f, 0.58f, 0.16f, 0.95f);
+			}
+			if (Integrity < 0.34f || bOpen)
+			{
+				DoorColor = FLinearColor(0.78f, 0.16f, 0.1f, 0.95f);
+			}
+			if (bOpen)
+			{
+				DoorColor.A = 0.55f + 0.45f * (0.5f + 0.5f * FMath::Sin(GetWorld()->GetTimeSeconds() * 6.f));
+			}
+
+			const FString DoorLabel = bOpen
+				? FString::Printf(TEXT("%s  OPEN"), *Entrance->GetEntranceLabel())
+				: FString::Printf(TEXT("%s  %d/%d"), *Entrance->GetEntranceLabel(), Entrance->GetIntactPlanks(), Entrance->GetPlankCount());
+			DrawBar(DoorX, DoorY, DoorWidth, DoorHeight, bOpen ? 0.f : Integrity, DoorColor, DoorLabel);
+			DoorY += DoorHeight + 22.f;
 		}
 
 		if (Mode->GetBannerAlpha() > 0.02f && Medium)
@@ -125,7 +161,7 @@ void AZombieSurviverHUD::DrawHUD()
 		Canvas->DrawItem(Dead);
 		if (Small)
 		{
-			const FString HintText(TEXT("the street takes you back"));
+			const FString HintText = FString::Printf(TEXT("SURVIVED  %s"), *Mode->GetSurvivalText());
 			Canvas->TextSize(Small, HintText, TextWidth, TextHeight);
 			FCanvasTextItem Hint(FVector2D(Center.X - TextWidth * 0.5f, Center.Y + 42.f), FText::FromString(HintText), Small, FLinearColor(0.9f, 0.85f, 0.75f, 0.85f));
 			Hint.EnableShadow(FLinearColor::Black);
@@ -133,9 +169,38 @@ void AZombieSurviverHUD::DrawHUD()
 		}
 	}
 
+	if (Mode && !Mode->IsGameOver() && Small)
+	{
+		FString Prompt;
+		if (Survivor && Survivor->WantsHammerPrompt())
+		{
+			if (AWoodWall* Door = Survivor->GetFocusedEntrance())
+			{
+				const int32 Percent = FMath::RoundToInt(Door->GetIntegrity() * 100.f);
+				Prompt = FString::Printf(TEXT("HOLD RMB / E   HAMMER  %s  %d%%"), *Door->GetEntranceLabel(), Percent);
+			}
+		}
+		else if (Mode->GetSurvivalTime() < 20.f)
+		{
+			Prompt = TEXT("HOLD RMB OR E AT A DOOR TO HAMMER THE BOARDS");
+		}
+
+		if (!Prompt.IsEmpty())
+		{
+			float TextWidth = 0.f;
+			float TextHeight = 0.f;
+			Canvas->TextSize(Small, Prompt, TextWidth, TextHeight);
+			FCanvasTextItem Hint(FVector2D(Center.X - TextWidth * 0.5f, Height * 0.68f), FText::FromString(Prompt), Small, FLinearColor(0.93f, 0.72f, 0.38f, 0.95f));
+			Hint.EnableShadow(FLinearColor::Black);
+			Canvas->DrawItem(Hint);
+		}
+	}
+
 	const float Spread = Survivor ? Survivor->GetCrosshairSpread() : 4.f;
 	const float Confirm = Survivor ? Survivor->GetHitConfirm() : 0.f;
-	const FLinearColor CrossColor = FMath::Lerp(FLinearColor(1.f, 1.f, 1.f, 0.9f), FLinearColor(1.f, 0.25f, 0.15f, 1.f), Confirm);
+	const bool bHammer = Survivor && Survivor->WantsHammerPrompt();
+	const FLinearColor IdleColor = bHammer ? FLinearColor(0.93f, 0.68f, 0.32f, 0.95f) : FLinearColor(1.f, 1.f, 1.f, 0.9f);
+	const FLinearColor CrossColor = FMath::Lerp(IdleColor, FLinearColor(1.f, 0.25f, 0.15f, 1.f), Confirm);
 	DrawCrosshair(Center, Spread, CrossColor);
 
 	if (CrosshairTex)

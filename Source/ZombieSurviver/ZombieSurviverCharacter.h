@@ -4,6 +4,7 @@
 #include "ZombieSurviverCharacter.generated.h"
 
 class UInputComponent;
+class AWoodWall;
 
 UCLASS(config=Game)
 class AZombieSurviverCharacter : public ACharacter
@@ -88,12 +89,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = Survivor)
 	bool IsSurvivorDead() const { return bDead; }
 
+	class AWoodWall* GetFocusedEntrance() const { return FocusedEntrance; }
+	bool WantsHammerPrompt() const;
+
 protected:
 	
 	/** Fires a projectile. */
 	void OnFire();
 
 	void OnMelee();
+	void OnHammerPressed();
+	void OnHammerReleased();
+	void SwingHammer(bool bAllowMelee);
+	void UpdateRepairAim();
 	void StartSprint();
 	void StopSprint();
 	void ToggleFlashlight();
@@ -177,6 +185,8 @@ private:
 	bool bDead;
 	bool bFlashlightOn;
 	bool bViewCached;
+	bool bHammerHeld;
+	class AWoodWall* FocusedEntrance;
 	FVector CameraBaseRelLocation;
 	FVector ArmsBaseRelLocation;
 	TMap<AActor*, float> BiteTimes;
