@@ -26,6 +26,9 @@ public:
 	void SetTarget(AActor* player);
 
 private:
-	
+	void AcquireTarget();
+
 	AActor* m_targetPlayer;
+	float DoorAttackCooldown;
+	float StuckTime;
 };
