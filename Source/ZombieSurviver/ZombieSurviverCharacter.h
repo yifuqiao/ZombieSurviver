@@ -21,8 +21,18 @@ class AZombieSurviverCharacter : public ACharacter
 	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* FirstPersonCameraComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Light, meta = (AllowPrivateAccess = "true"))
+	class USpotLightComponent* Flashlight;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Light, meta = (AllowPrivateAccess = "true"))
+	class UPointLightComponent* MuzzleLight;
+
 public:
 	AZombieSurviverCharacter();
+
+	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
@@ -48,10 +58,45 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	class UAnimMontage* FireAnimation;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Survivor)
+	int32 MaxHealth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Survivor)
+	float FireInterval;
+
+	UFUNCTION(BlueprintCallable, Category = Survivor)
+	void ApplySurvivorDamage(int32 Amount, FVector FromLocation);
+
+	void AddCameraTrauma(float Amount);
+	void ConfirmHit();
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	float GetHealthPercent() const;
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	float GetStaminaPercent() const;
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	float GetCrosshairSpread() const;
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	float GetDamageFlash() const { return DamageFlash; }
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	float GetHitConfirm() const { return HitConfirm; }
+
+	UFUNCTION(BlueprintPure, Category = Survivor)
+	bool IsSurvivorDead() const { return bDead; }
+
 protected:
 	
 	/** Fires a projectile. */
 	void OnFire();
+
+	void OnMelee();
+	void StartSprint();
+	void StopSprint();
+	void ToggleFlashlight();
 
 	/** Handles moving forward/backward */
 	void MoveForward(float Val);
@@ -97,11 +142,42 @@ protected:
 	 */
 	bool EnableTouchscreenMovement(UInputComponent* InputComponent);
 
+	void HandleDeath();
+	void UpdateFeel(float DeltaSeconds);
+	void UpdateThreat(float DeltaSeconds);
+	void UpdatePostProcess(float DeltaSeconds);
+
 public:
 	/** Returns Mesh1P subobject **/
 	FORCEINLINE class USkeletalMeshComponent* GetMesh1P() const { return Mesh1P; }
 	/** Returns FirstPersonCameraComponent subobject **/
 	FORCEINLINE class UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
 
+private:
+	int32 Health;
+	float Stamina;
+	float StaminaRegenDelay;
+	float FireCooldown;
+	float MeleeCooldown;
+	float DamageFlash;
+	float HitConfirm;
+	float Trauma;
+	float RecoilPitch;
+	float AppliedRoll;
+	float BobTime;
+	float FootstepClock;
+	float ThreatClock;
+	float HealBank;
+	float TimeSinceDamage;
+	float VulnerableTime;
+	float WalkSpeed;
+	float SprintSpeed;
+	float MuzzleIntensity;
+	bool bWantsSprint;
+	bool bDead;
+	bool bFlashlightOn;
+	bool bViewCached;
+	FVector CameraBaseRelLocation;
+	FVector ArmsBaseRelLocation;
+	TMap<AActor*, float> BiteTimes;
 };
-

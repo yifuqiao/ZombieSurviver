@@ -16,14 +16,21 @@ public:
 
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Wall")
 	void TakeDamage(int32 deltaDamange);
 	
 private:
+	void BreakPlank(class AWoodPlank* Plank);
 	
 	TArray<class AWoodPlank*> m_allWoodPlanks;
 	int32 m_hitPoint;
+	int32 m_maxHitPoint;
+	int32 m_brokenCount;
+	float ShakeRemaining;
+	float LastImpactSoundTime;
+	FRotator BaseRotation;
 
 protected:
 

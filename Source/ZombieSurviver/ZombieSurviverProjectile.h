@@ -16,6 +16,9 @@ class AZombieSurviverProjectile : public AActor
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Movement, meta = (AllowPrivateAccess = "true"))
 	class UProjectileMovementComponent* ProjectileMovement;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Light, meta = (AllowPrivateAccess = "true"))
+	class UPointLightComponent* TracerLight;
+
 public:
 	AZombieSurviverProjectile();
 
