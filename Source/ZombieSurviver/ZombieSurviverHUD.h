@@ -15,8 +15,10 @@ public:
 	virtual void DrawHUD() override;
 
 private:
+	void DrawBar(float X, float Y, float Width, float Height, float Percent, const FLinearColor& Fill, const FString& Label);
+	void DrawCrosshair(const FVector2D& Center, float Spread, const FLinearColor& Color);
+
 	/** Crosshair asset pointer */
 	class UTexture2D* CrosshairTex;
 
 };
-

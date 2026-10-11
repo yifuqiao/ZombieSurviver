@@ -31,6 +31,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spawning")
 	void SetSpawningActive(bool bShouldSpawn);
 
+	/** Tighten or loosen the delay before the next zombie climbs out. */
+	void SetSpawnWindow(float Low, float High);
+
 	
 
 protected:

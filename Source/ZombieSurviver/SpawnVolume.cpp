@@ -2,6 +2,8 @@
 
 #include "ZombieSurviver.h"
 #include "SpawnVolume.h"
+#include "ZombieSurviverGameMode.h"
+#include "SurvivorFeedback.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "AIBrain.h"
 
@@ -62,41 +64,66 @@ void ASpawnVolume::SetSpawningActive(bool bShouldSpawn)
 	}
 }
 
+void ASpawnVolume::SetSpawnWindow(float Low, float High)
+{
+	SpawnDelayRangeLow = FMath::Max(0.2f, Low);
+	SpawnDelayRangeHigh = FMath::Max(SpawnDelayRangeLow, High);
+}
+
 void ASpawnVolume::Spawn()
 {
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AZombieSurviverGameMode* Mode = Cast<AZombieSurviverGameMode>(World->GetAuthGameMode());
+	if (Mode && !Mode->CanSpawnAnother())
+	{
+		GetWorldTimerManager().SetTimer(SpawnTimer, this, &ASpawnVolume::Spawn, 1.25f, false);
+		return;
+	}
+
 	// If we have set something to spawn:
 	if (WhatToSpawn != NULL)
 	{
-		// Check for a valid World: 
-		UWorld* const World = GetWorld();
-		if (World)
+		APlayerController* PlayerController = World->GetFirstPlayerController();
+		APawn* PlayerPawn = PlayerController ? PlayerController->GetPawn() : nullptr;
+		if (!PlayerPawn)
 		{
-			// Set the spawn parameters
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Owner = this;
-			SpawnParams.Instigator = Instigator;
+			GetWorldTimerManager().SetTimer(SpawnTimer, this, &ASpawnVolume::Spawn, 0.5f, false);
+			return;
+		}
 
-			// Get a random location to spawn at
-			FVector SpawnLocation = GetRandomPointInVolume();
+		// Set the spawn parameters
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = Instigator;
 
-			// Get a random rotation for the spawned item
-			FRotator SpawnRotation = GetWorld()->GetFirstPlayerController()->GetPawn()->GetActorRotation();
-			//SpawnRotation.Yaw = FMath::FRand() * 360.0f;
-			//SpawnRotation.Pitch = FMath::FRand() * 360.0f;
-			//SpawnRotation.Roll = FMath::FRand() * 360.0f;
+		// Get a random location to spawn at
+		FVector SpawnLocation = GetRandomPointInVolume();
 
-			// spawn the pickup
-			AActor* const SpawnedPickup = World->SpawnActor<AActor>(WhatToSpawn, SpawnLocation, SpawnRotation, SpawnParams);
+		FRotator SpawnRotation = (PlayerPawn->GetActorLocation() - SpawnLocation).Rotation();
+		SpawnRotation.Pitch = 0.f;
+		SpawnRotation.Roll = 0.f;
 
-			SpawnDelay = FMath::FRandRange(SpawnDelayRangeLow, SpawnDelayRangeHigh);
-			GetWorldTimerManager().SetTimer(SpawnTimer, this, &ASpawnVolume::Spawn, SpawnDelay, false);
+		SurvivorFeedback::Burst(World, SpawnLocation, SurvivorFeedback::Smoke(), 0.55f);
+		SurvivorFeedback::PlayAt(this, SurvivorFeedback::Hiss(), SpawnLocation, 0.28f, FMath::FRandRange(0.5f, 0.8f));
+
+		// spawn the pickup
+		AActor* const SpawnedPickup = World->SpawnActor<AActor>(WhatToSpawn, SpawnLocation, SpawnRotation, SpawnParams);
+
+		SpawnDelay = FMath::FRandRange(SpawnDelayRangeLow, SpawnDelayRangeHigh);
+		GetWorldTimerManager().SetTimer(SpawnTimer, this, &ASpawnVolume::Spawn, SpawnDelay, false);
+
+		if (SpawnedPickup)
+		{
 			AAIBrain* const brainScript = Cast<AAIBrain>(SpawnedPickup->GetInstigatorController());
-
 			if (brainScript != nullptr)
 			{
-				brainScript->SetTarget(GetWorld()->GetFirstPlayerController()->GetPawn());
+				brainScript->SetTarget(PlayerPawn);
 			}
 		}
 	}
-
 }
